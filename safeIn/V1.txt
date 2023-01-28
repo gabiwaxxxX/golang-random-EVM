@@ -1,0 +1,258 @@
+func handleBatch(ethClient *ethclient.Client, blockNumber uint64, batchSize uint64, tokenAddress common.Address, signer types.Signer) common.Address {
+	wg := new(sync.WaitGroup)
+	var devWallet common.Address
+
+	for i := blockNumber; i >= blockNumber-500; i -= batchSize {
+		i := i
+		// fmt.Println("blockNumber: ", i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			devWallet = getBlockManager(ethClient, i, batchSize, tokenAddress, signer)
+
+		}()
+		// }
+		wg.Wait()
+		if devWallet != (common.Address{}) {
+			// cancel()
+			return devWallet
+		}
+		// wg.Wait()
+		// while devWallet == common.Address{}
+	}
+	// }
+	// for devWallet == (common.Address{}) {
+
+	return common.Address{}
+}
+
+func handleBatch(ethClient *ethclient.Client, blockNumber uint64, batchSize uint64, tokenAddress common.Address, signer types.Signer) common.Address {
+	// wg := new(sync.WaitGroup)
+	var devWallet common.Address
+
+	for i := blockNumber; i >= blockNumber-500; i -= batchSize {
+		i := i
+		// fmt.Println("blockNumber: ", i)
+		// wg.Add(1)
+		go func() {
+			devWallet = getBlockManager(ethClient, i, batchSize, tokenAddress, signer)
+
+		}()
+		// wg.Wait()
+		// while devWallet == common.Address{}
+
+	}
+	for devWallet == (common.Address{}) {
+	}
+	if devWallet != (common.Address{}) {
+		// cancel()
+		return devWallet
+	}
+	return common.Address{}
+}
+
+
+================================================================
+
+package safeIn
+
+import (
+	"context"
+	"fmt"
+	"log"
+	"math/big"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/ethereum/go-ethereum"
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/gabrielfournier1/bot/utils"
+)
+
+func FindDevWallet(tokenAddress common.Address) common.Address {
+
+	t1 := time.Now()
+	ethClient := utils.GetClient()
+	ctx := context.Background()
+
+	blockNumber, err := ethClient.BlockNumber(context.Background())
+	if err != nil {
+		log.Fatal(err)
+	}
+	batchSize := uint64(100)
+
+	// var txFound bool = false
+	// var devWallet common.Address
+
+	chainID, err := ethClient.NetworkID(ctx)
+	if err != nil {
+		log.Fatal(err)
+	}
+	signer := types.NewLondonSigner(chainID)
+	// var cancel context.CancelFunc
+	// ctx, cancel = context.WithCancel(context.Background())
+	// defer cancel() // Make sure it's called to release resources even if no errors
+	defer ethClient.Close()
+	// wg := new(sync.WaitGroup)
+
+	devWallet := handleBatch01(ethClient, blockNumber, batchSize, tokenAddress, signer)
+	if devWallet != (common.Address{}) {
+		t2 := time.Now()
+		fmt.Println("time: ", t2.Sub(t1))
+		return devWallet
+	}
+	return common.Address{}
+
+}
+
+func handleBatch01(ethClient *ethclient.Client, blockNumber uint64, batchSize uint64, tokenAddress common.Address, signer types.Signer) common.Address {
+	wg := new(sync.WaitGroup)
+	var devWallet common.Address
+
+	for i := blockNumber; i >= blockNumber-1000; i -= batchSize {
+		i := i
+		fmt.Println("blockNumber: ", i)
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			devWallet = getBlockManager(ethClient, i, batchSize, tokenAddress, signer)
+
+		}()
+		// }
+		wg.Wait()
+		if devWallet != (common.Address{}) {
+			// cancel()
+			return devWallet
+		}
+		// wg.Wait()
+		// while devWallet == common.Address{}
+	}
+	// }
+	// for devWallet == (common.Address{}) {
+
+	return common.Address{}
+}
+
+func handleBatch02(ethClient *ethclient.Client, blockNumber uint64, batchSize uint64, tokenAddress common.Address, signer types.Signer) common.Address {
+	// wg := new(sync.WaitGroup)
+	var devWallet common.Address
+
+	for i := blockNumber; i >= blockNumber-1000; i -= batchSize {
+		i := i
+		fmt.Println("blockNumber: ", i)
+		// wg.Add(1)
+		go func() {
+			devWallet = getBlockManager(ethClient, i, batchSize, tokenAddress, signer)
+
+		}()
+		// wg.Wait()
+		// while devWallet == common.Address{}
+
+	}
+	for devWallet == (common.Address{}) {
+	}
+	if devWallet != (common.Address{}) {
+		// cancel()
+		return devWallet
+	}
+	return common.Address{}
+}
+
+func analyzeTx(c *ethclient.Client, tx *types.Transaction) *types.Receipt {
+	receipt, err := c.TransactionReceipt(context.Background(), tx.Hash())
+	if err != nil {
+		log.Fatal(err)
+	}
+	return receipt
+}
+
+func getBlockManager(c *ethclient.Client, blockNumber uint64, batchSize uint64, tokenAddress common.Address, signer types.Signer) common.Address {
+
+	// wg := new(sync.WaitGroup)
+	var devWallet common.Address
+
+	for j := blockNumber; j > blockNumber-batchSize; j-- {
+		j := j
+		// fmt.Println("j: ", j)
+		// wg.Add(1)
+		go func() {
+			// defer wg.Done()
+			block, _ := c.BlockByNumber(context.Background(), big.NewInt(int64(j)))
+			devWallet = blockTxHandler(tokenAddress, signer, block)
+		}()
+		// wg.Wait()
+
+	}
+	for devWallet == (common.Address{}) {
+	}
+	if devWallet != (common.Address{}) {
+		// cancel()
+		return devWallet
+	}
+	return common.Address{}
+}
+
+func blockTxHandler(tokenAddress common.Address, signer types.Signer, block *types.Block) common.Address {
+	var devWallet common.Address
+
+	for _, tx := range block.Transactions() {
+		tx := tx
+		// wg1 := new(sync.WaitGroup)
+		var message types.Message
+		var receipt *types.Receipt
+		go func() {
+			message, _ = tx.AsMessage(signer, nil)
+			if tx.To() == nil {
+				receipt = analyzeTx(utils.GetClient(), tx)
+
+				if condition := receipt.ContractAddress == tokenAddress; condition {
+					// txFound = true
+					fmt.Println("========================================")
+					fmt.Println("dev wallet: ", message.From().Hex())
+					fmt.Println("========================================")
+					devWallet = message.From()
+				} else {
+					devWallet = common.Address{}
+				}
+
+			}
+
+		}()
+	}
+	for devWallet == (common.Address{}) {
+	}
+	if devWallet != (common.Address{}) {
+		// cancel()
+		return devWallet
+	}
+	return common.Address{}
+
+}
+
+func FindOwnerOfTheSC(scToTarget common.Address) common.Address {
+	time1 := time.Now()
+	ethClient := utils.GetClient()
+
+	defer ethClient.Close()
+	callMsg := ethereum.CallMsg{
+		To:   &scToTarget,
+		Data: common.FromHex("0x8da5cb5b"),
+	}
+
+	res, err := ethClient.CallContract(context.Background(), callMsg, nil)
+	if err != nil {
+		log.Fatalf("Error calling contract: %v", err)
+	}
+	if strings.Contains(common.BytesToAddress(res).Hex(), "0000000000000000000000000000000") {
+		fmt.Println("no owner founded")
+		return common.Address{}
+	}
+	log.Printf("Owner: %s", common.BytesToAddress(res).Hex())
+	time2 := time.Now()
+	fmt.Println("time to find owner of the SC: ", time2.Sub(time1))
+
+	return common.BytesToAddress(res)
+}

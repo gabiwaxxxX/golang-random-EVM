@@ -1,0 +1,215 @@
+package main
+
+import (
+
+	"log"
+	"os"
+	"fmt"
+	"encoding/json"
+	"io/ioutil"
+	"sync"
+
+    // "github.com/gabrielfournier1/bot/mempool"
+    // "github.com/gabrielfournier1/bot/nucleus"
+	"github.com/gabrielfournier1/bot/utils"
+
+	"github.com/spf13/viper"
+	"time"
+	"github.com/ethereum/go-ethereum/common"
+)
+
+const UNI_SWAP_FACTORY_CONTRACT_ADDRESS="0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f"
+const SUSHI_FACTORY_ADDRESS="0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac"
+
+
+
+// type Node interface {
+// 	id common.Address
+// }
+
+// type Edge interface {
+// 	from	Node
+// 	to		Node
+// }
+
+// type Graph interface {
+
+// }
+
+// type Node struct {
+// 	id    common.Address
+// }
+
+// type Graph struct {
+//     nodes map[common.Address]*Node
+//     edges map[Node][]*Node
+// }
+
+
+func main() {
+	fmt.Println("Hello World")
+	viper.SetConfigFile("config.yml")
+	if err := viper.ReadInConfig(); err != nil {
+		if os.IsNotExist(err) {
+			if args := os.Args; len(args) >= 2 && args[1] == "init" {
+				return
+			}
+		}
+		log.Fatal("init config before sniper")
+	}
+	// sync pairs
+	fmt.Println("loading pairs...")
+
+	file, err := ioutil.ReadFile("Lps_2.json")
+	if err != nil {
+		fmt.Printf("Error when reading config.json: %s\n", err)
+	}
+	//create a new config
+	var LPLoaded map[common.Address]map[common.Address]map[common.Address]common.Address
+	json.Unmarshal(file, &LPLoaded)
+	if err != nil {
+		fmt.Printf("Error when reading unmarshaling config file: %s\n", err)
+	}
+	fmt.Println("loaded pairs")
+	fmt.Println(len(LPLoaded[common.HexToAddress("0x5C69bEe701ef814a2B6a3EDD4B1652CB9cc5aA6f")]))
+	fmt.Println(len(LPLoaded[common.HexToAddress("0xC0AEe478e3658e2610c5F7A4A2E1777cE9e4f2Ac")]))
+	// fmt.Println(len(LPLoaded))
+
+	// // //get first value in the LPLoaded map
+	// // var onlyLP []common.Address
+	// // // 16.556583ms to compute
+	// // for _, value := range LPLoaded {
+	// // 	for _, value2 := range value {
+	// // 		for _, value3 := range value2 {
+	// // 			onlyLP = append(onlyLP, value3)
+	// // 		}
+	// // 	}
+	// // }
+	// // fmt.Println(len(onlyLP))
+	// // fmt.Println(onlyLP[0:5])
+	start1 := time.Now()
+	var mut sync.Mutex
+	var wg sync.WaitGroup
+	var LPNotRugged map[common.Address]map[common.Address]map[common.Address]common.Address
+	LPNotRugged = make(map[common.Address]map[common.Address]map[common.Address]common.Address)
+	var client = utils.GetClient()
+	for dex := range LPLoaded {
+
+			fmt.Println("dex: ", dex)
+			defer wg.Done()
+			for token0 := range LPLoaded[dex] {
+				token0 := token0
+				wg.Add(1)
+				go func() {
+				// fmt.Println("token0", token0)
+				for token1 := range LPLoaded[dex][token0] {
+					// fmt.Println(pairAddress)
+					isRug := utils.CheckAll(LPLoaded[dex][token0][token1],client)
+					if !isRug {
+						mut.Lock()
+						if _, ok := LPNotRugged[dex]; !ok {
+							LPNotRugged[dex] = make(map[common.Address]map[common.Address]common.Address)
+						}
+						if _, ok := LPNotRugged[dex][token0]; !ok {
+							LPNotRugged[dex][token0] = make(map[common.Address]common.Address)
+						}
+						LPNotRugged[dex][token0][token1] = LPLoaded[dex][token0][token1]
+						mut.Unlock()
+					}
+				}
+			}()
+
+			}
+	}
+	wg.Wait()
+	elapsed := time.Since(start1)
+	fmt.Println("elapsed time:",elapsed)
+
+	jsonStr, err := json.Marshal(LPNotRugged)
+	if err != nil {
+		fmt.Printf("Error: %s", err.Error())
+	} else {
+		ioutil.WriteFile("LPNotRugged_2.json", jsonStr, 0644)
+	}
+
+
+
+	// create a new graph
+	// var graph Graph
+
+
+	// for token0,_ := range LPLoaded[common.HexToAddress(UNI_SWAP_FACTORY_CONTRACT_ADDRESS)]{
+	// 	//
+	// 	graph.nodes[token0] = &Node{
+	// 		id:    token0,
+	// 	}
+	// 	for token1,_ := range LPLoaded[common.HexToAddress(UNI_SWAP_FACTORY_CONTRACT_ADDRESS)][token0]{
+	// 		if _, ok := graph.nodes[token1]; !ok {
+	// 			graph.nodes = append(graph.nodes, &Node{
+	// 				id:    token1,
+	// 			})
+	// 		}
+	// 		graph.edges[*token0] = append(graph.edges[*token0], token1)
+	// 		graph.edges[*token1] = append(graph.edges[*token1], token0)
+	// 	}
+	// }
+
+
+
+
+	// start := time.Now()
+
+	// LPs, err := nucleus.LoadLPFromEvent([]string{UNI_SWAP_FACTORY_CONTRACT_ADDRESS,SUSHI_FACTORY_ADDRESS})
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+	// elapsed := time.Since(start)
+	// fmt.Printf("loaded %d pairs in %v\n", len(LPs[common.HexToAddress(UNI_SWAP_FACTORY_CONTRACT_ADDRESS)]), elapsed)
+	// fmt.Printf("loaded %d pairs in %v\n", len(LPs[common.HexToAddress(SUSHI_FACTORY_ADDRESS)]), elapsed)
+
+	// if len(LPs) > 0 {
+	// 	jsonStr, err := json.Marshal(LPs)
+	// 	if err != nil {
+	// 		fmt.Printf("Error: %s", err.Error())
+	// 	} else {
+	// 		ioutil.WriteFile("Lps_2.json", jsonStr, 0644)
+	// 	}
+	// }
+
+
+
+
+	// go mempool.ListenOnMemPool("0x45e85e343Dc1B4004a76e6cD7b43a30b63526fBb")
+
+}
+
+
+// package main
+
+// import (
+// 	"log"
+// 	"os"
+// 	"fmt"
+// 	"github.com/gabrielfournier1/bot/utils"
+// 	"github.com/spf13/viper"
+//     // "github.com/gabrielfournier1/bot/mempool"
+
+// )
+
+
+// func main() {
+// 	fmt.Println("Hello World")
+// 	viper.SetConfigFile("config.yml")
+// 	if err := viper.ReadInConfig(); err != nil {
+// 		if os.IsNotExist(err) {
+// 			if args := os.Args; len(args) >= 2 && args[1] == "init" {
+// 				return
+// 			}
+// 		}
+// 		log.Fatal("init config before sniper")
+// 	}
+
+// 	// go mempool.ListenOnMemPool("")
+// 	utils.SniperUniCake(0.2,0,"0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2","0x2E0D3e14E202600A895249214D3B191dACFC9095")
+// }
+

@@ -1,0 +1,160 @@
+func readInput(amountInted float64, path []common.Address) {
+	ch := make(chan Tracking, 1)
+	go TrackGains(ch)
+	ch <- Tracking{amountInted,path}
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		input, _, err := reader.ReadLine()
+		if err != nil {
+			fmt.Printf("could not process input %v\n", input)
+		}
+		var amountIn float64
+		if strings.Contains(string(input),"buy") {
+			amountIn, _ = strconv.ParseFloat(strings.Split(string(input)," ")[1], 64)
+			Buy(amountIn, []common.Address{path[1],path[0]})
+			<-ch
+			ch <- Tracking{amountIn+amountInted,path}
+		}
+		switch string(input) {
+		case "sell":
+			fmt.Println("selling your amount of tokens")
+			SellTokens(path)
+			<-ch
+			ch <- Tracking{0,[]common.Address{}}
+
+		case "half":
+			fmt.Println("half your amount of tokens")
+			SellHalfTokens(path)
+			<-ch
+			ch <- Tracking{0,path}
+
+
+		}
+	}
+}
+
+func SellTokens(path []common.Address) {
+	router, err := swaprouter.NewStore(common.HexToAddress("0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"), GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+	token, err := erc20.NewErc20(path[0], GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+	balance, err := token.BalanceOf(nil, GetUserInfo().fromAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
+	amountOut := big.NewInt(0)
+	var data [][]byte = PrepareDataToSwap(TransactionInput{toHexInt(balance), toHexInt(amountOut), GetUserInfo().fromAddress, path,"WETH"})
+
+
+	auth, err := bind.NewKeyedTransactorWithChainID(GetUserInfo().privateKey, big.NewInt(1))
+	if err != nil {
+		log.Fatal(err)
+	}
+	auth.GasLimit = 500000
+	auth.GasPrice, err =  GetClient().SuggestGasPrice(context.Background())
+
+	auth.GasPrice = new(big.Int).Div(new(big.Int).Mul(auth.GasPrice,big.NewInt(130)),big.NewInt(100))
+
+	tx, err := router.Multicall0(auth,big.NewInt(time.Now().Add(5*time.Minute).Unix()), data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	awaitToConfirmTx(tx)
+}
+
+
+func CheckAllowanceAndApprove(tokenAddr string,amount *big.Int, spender string) {
+
+	token, err := erc20.NewErc20(common.HexToAddress(tokenAddr), GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	allowance, err := token.Allowance(nil, GetUserInfo().fromAddress, common.HexToAddress(spender))
+	if err != nil {
+		log.Fatal(err)
+	}
+	//check if allowance token is higher than amountIn
+	if allowance.Cmp(amount) < 0 {
+		fmt.Println("Your allowance is not high enough, you need to approve more tokens")
+		ApproveSpenderToken(tokenAddr,spender)
+
+	}
+}
+
+func SellHalfTokens(path []common.Address) {
+	router, err := swaprouter.NewStore(common.HexToAddress("0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"), GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+	token, err := erc20.NewErc20(path[0], GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+	balance, err := token.BalanceOf(nil, GetUserInfo().fromAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
+	halfBalance := new(big.Int).Div(balance,big.NewInt(2))
+	amountOut := big.NewInt(0)
+	var data [][]byte = PrepareDataToSwap(TransactionInput{toHexInt(halfBalance), toHexInt(amountOut), GetUserInfo().fromAddress, path,"WETH"})
+
+
+	auth, err := bind.NewKeyedTransactorWithChainID(GetUserInfo().privateKey, big.NewInt(1))
+	if err != nil {
+		log.Fatal(err)
+	}
+	auth.GasLimit = 500000
+	auth.GasPrice, err =  GetClient().SuggestGasPrice(context.Background())
+
+	auth.GasPrice = new(big.Int).Div(new(big.Int).Mul(auth.GasPrice,big.NewInt(130)),big.NewInt(100))
+
+	tx, err := router.Multicall0(auth,big.NewInt(time.Now().Add(5*time.Minute).Unix()), data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	awaitToConfirmTx(tx)
+}
+
+func Buy(amountIn float64, path []common.Address) {
+	router, err := swaprouter.NewStore(common.HexToAddress("0x68b3465833fb72A70ecDF485E0e4C7bD8665Fc45"), GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+	token, err := erc20.NewErc20(path[0], GetClient())
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	decimal0, err :=token.Decimals(&bind.CallOpts{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	amountInF, _ := big.NewFloat(amountIn * PowInt(10, int(decimal0))).Int(nil)
+
+	amountOut := big.NewInt(0)
+	var data [][]byte = PrepareDataToSwap(TransactionInput{toHexInt(amountInF), toHexInt(amountOut), GetUserInfo().fromAddress, path,"WETH"})
+	auth, err := bind.NewKeyedTransactorWithChainID(GetUserInfo().privateKey, big.NewInt(1))
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	test, _ := big.NewFloat(amountIn * PowInt(10, int(decimal0))).Int(nil)
+	if(path[0].String() == eth_const.FindAddressFromTokenSymbol("WETH")){
+		auth.Value = test
+	}
+
+	auth.GasLimit = 500000
+	auth.GasPrice, err =  GetClient().SuggestGasPrice(context.Background())
+
+	auth.GasPrice = new(big.Int).Div(new(big.Int).Mul(auth.GasPrice,big.NewInt(200)),big.NewInt(100))
+	tx, err := router.Multicall0(auth,big.NewInt(time.Now().Add(5*time.Minute).Unix()), data)
+	if err != nil {
+		log.Fatal(err)
+	}
+	awaitToConfirmTx(tx)
+}
